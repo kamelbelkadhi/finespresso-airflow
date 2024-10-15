@@ -18,6 +18,15 @@ then
     exit 1
 fi
 
+# Pull the latest image or rebuild the Docker images to reflect changes
+echo "Pulling the latest Docker images (if applicable) or rebuilding the images..."
+docker-compose pull
+docker-compose build --no-cache
+
+# Stop and remove the existing containers if running
+echo "Stopping and removing existing Airflow containers..."
+docker-compose down
+
 # Initialize the Airflow database using Docker Compose
 echo "Initializing the Airflow database..."
 docker-compose up airflow-init
