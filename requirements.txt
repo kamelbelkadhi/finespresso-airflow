@@ -1,0 +1,15 @@
+pandas
+feedparser
+python-dotenv
+openai
+gptcache
+beautifulsoup4
+SQLAlchemy
+psycopg2-binary
+playwright
+elevenlabs
+yfinance
+PyYAML
+holidays
+pandas_market_calendars
+pytz==2023.3
