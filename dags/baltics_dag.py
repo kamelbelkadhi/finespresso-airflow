@@ -7,6 +7,7 @@ from pytz import timezone
 import logging
 from utils.web_utils import get_content
 from utils.db_utils import *
+from utils.openai_utils import *
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -70,30 +71,60 @@ def fetch_nasdaqbaltic_rss(**kwargs):
     else:
         logger.info("No new news items to insert")
 
+# Function to fetch and update content, ticker, and other fields dynamically
 def get_news_content(**kwargs):
     logger.info("Starting get_news_content task...")
-    # Fetch rows where content is empty (newly added rows)
-    new_rows = check_for_empty_content(publisher_filter='baltics')
+    # Fetch rows where 'content' is empty
+    new_rows = check_for_empty_fields(fields=['content'], publisher_filter='baltics')
     logger.info(f"Found {len(new_rows)} rows with empty content")
     
     for row in new_rows:
-        # Since row is now a dictionary, we can access fields using keys
         link = row['link']
         logger.info(f"Fetching content for link: {link}")
         
+        # Fetch content from the URL
         content = get_content(link)
+        fields_to_update = {}
+        
         if content:
-            row['content'] = content  # Update content in the dictionary
-            logger.info(f"Updating content for link: {link}")
-            update_news_content(row)  # Pass the updated row dictionary to update the DB
+            fields_to_update['content'] = content
         else:
             logger.warning(f"Failed to fetch content for link: {link}")
-
+        
+        if fields_to_update:
+            logger.info(f"Updating fields {fields_to_update.keys()} for link: {link}")
+            update_news_row(row, fields_to_update)
 
 def process_news_content(**kwargs):
     logger.info("Starting process_news_content task...")
-    # Placeholder for future processing logic
-    pass
+    # Fetch rows where 'ai_summary' or 'publisher_topic' are empty
+    new_rows = check_for_empty_fields(fields=['ai_summary', 'publisher_topic'], publisher_filter='baltics')
+    logger.info(f"Found {len(new_rows)} rows to process for tags and summaries")
+    
+    for row in new_rows:
+        title = row['title']
+        content = row['content']
+        
+        # Use OpenAI to summarize the content and generate tags
+        logger.info(f"Generating summary for news title: {title}")
+        summary = summarize(content)
+        logger.info(f"Generated summary: {summary}")
+        
+        logger.info(f"Generating tag for news title: {title}")
+        tag = tag_news(content)
+        logger.info(f"Generated tag: {tag}")
+        
+        # Prepare the fields to update
+        fields_to_update = {}
+        if summary:
+            fields_to_update['ai_summary'] = summary
+        if tag:
+            fields_to_update['publisher_topic'] = tag
+        
+        if fields_to_update:
+            logger.info(f"Updating fields {fields_to_update.keys()} for title: {title}")
+            update_news_row(row, fields_to_update)
+
 
 # Define the default_args for the DAG
 default_args = {
@@ -112,7 +143,7 @@ dag = DAG(
     'nasdaqbaltic_dag',
     default_args=default_args,
     description='A DAG to fetch and save Nasdaq Baltic RSS feed data',
-    #schedule_interval='@hourly',  # Schedule to run every hour
+    schedule_interval='@hourly',  # Schedule to run every hour
 )
 
 # Define the task

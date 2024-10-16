@@ -19,7 +19,7 @@ def connect_to_db():
 
 def insert_news_data(data):
     """
-    Inserts news data into the PostgreSQL database.
+    Inserts news data into the PostgreSQL database, checking for duplicates based on the link.
     
     :param data: A list of dictionaries containing the news data to be inserted.
     """
@@ -42,15 +42,20 @@ def insert_news_data(data):
         conn = connect_to_db()
         cursor = conn.cursor()
 
-        # Insert each row of data
+        # Insert each row of data after checking for duplicate links
         for row in data:
+            if check_existing_news(row['link']):
+                logging.info(f"News with link {row['link']} already exists. Skipping insertion.")
+                continue  # Skip this row if it already exists
+            
             row['insert_date'] = datetime.now()  # Add current timestamp for insert_date
             row['update_date'] = datetime.now()  # Add current timestamp for update_date (same as insert date)
+            
             cursor.execute(insert_query, row)
         
         # Commit the transaction
         conn.commit()
-        logging.info(f"{len(data)} records inserted successfully.")
+        logging.info(f"{len(data)} new records inserted successfully.")
 
     except Exception as e:
         logging.error(f"An error occurred while inserting data: {e}")
@@ -64,6 +69,7 @@ def insert_news_data(data):
         if conn:
             conn.close()
         logging.info("Database connection closed.")
+
 
 
 def check_existing_news(link):
@@ -91,13 +97,15 @@ def check_existing_news(link):
         if conn:
             conn.close()
 
-def check_for_empty_content(publisher_filter=None):
+def check_for_empty_fields(fields, publisher_filter=None, time_range_hours=2):
     """
-    Fetches rows where the content field is empty, created within the last two hours,
-    and applies an optional filter for specific companies or stocks.
-    
-    :param publisher_filter: Optional list of publisher names to filter by.
-    :return: List of rows with empty content as dictionaries, sorted by newest added.
+    Fetches rows where specified fields are empty or meet a specific condition, 
+    created within the last `time_range_hours`, and applies an optional filter for specific publishers.
+
+    :param fields: A list of field names to check for being empty or null.
+    :param publisher_filter: Optional publisher name to filter by.
+    :param time_range_hours: Time range in hours to limit the search.
+    :return: List of rows with empty or null fields as dictionaries, sorted by the newest added.
     """
     conn = None
     cursor = None
@@ -105,13 +113,15 @@ def check_for_empty_content(publisher_filter=None):
         conn = connect_to_db()
         cursor = conn.cursor(cursor_factory=RealDictCursor)  # Use RealDictCursor to return rows as dictionaries
 
-        # Define the time range for the last two hours
-        two_hours_ago = datetime.now() - timedelta(hours=2)
+        # Define the time range
+        time_threshold = datetime.now() - timedelta(hours=time_range_hours)
         
-        # Base query for fetching rows with empty content from the last two hours
-        query = """
+        # Build the query dynamically based on the provided fields
+        conditions = " OR ".join([f"{field} = ''" for field in fields])
+        
+        query = f"""
         SELECT * FROM public.news_
-        WHERE content = ''
+        WHERE ({conditions})
         AND insert_date >= %s
         """
         
@@ -122,15 +132,15 @@ def check_for_empty_content(publisher_filter=None):
         query += " ORDER BY published_date DESC"
 
         if publisher_filter:
-            cursor.execute(query, (two_hours_ago, publisher_filter))
+            cursor.execute(query, (time_threshold, publisher_filter))
         else:
-            cursor.execute(query, (two_hours_ago,))
+            cursor.execute(query, (time_threshold,))
         
-        logging.info("Fetched rows with empty content.")
+        logging.info(f"Fetched rows with empty fields: {fields}")
         return cursor.fetchall()  # Returns rows as a list of dictionaries
 
     except Exception as e:
-        logging.error(f"Error fetching empty content rows: {e}")
+        logging.error(f"Error fetching rows with empty fields: {e}")
         return []
     finally:
         if cursor:
@@ -140,36 +150,54 @@ def check_for_empty_content(publisher_filter=None):
 
 
 
-def update_news_content(row):
+
+def update_news_row(row, fields_to_update):
     """
-    Updates the content of a news row in the database, including the update_date.
-    :param row: The row data to update.
+    Updates specified fields of a news row in the database, including the update_date.
+
+    :param row: The row data to update, must contain the 'link' key.
+    :param fields_to_update: A dictionary of fields and their new values to update.
     """
+    if 'link' not in row:
+        logging.error("Link is missing from the row data, cannot perform update.")
+        return
+
     conn = None
     cursor = None
     try:
         conn = connect_to_db()
         cursor = conn.cursor()
 
-        # Update the row with the new content and update_date
-        row['update_date'] = datetime.now()  # Add current timestamp for update_date
-
-        update_query = """
+        # Prepare the SQL query dynamically based on fields to update
+        set_clauses = []
+        for field in fields_to_update:
+            set_clauses.append(f"{field} = %s")
+        
+        # Add the update_date field to always update it
+        set_clauses.append("update_date = %s")
+        
+        update_query = f"""
         UPDATE public.news_
-        SET content = %(content)s, update_date = %(update_date)s
-        WHERE link = %(link)s
+        SET {', '.join(set_clauses)}
+        WHERE link = %s
         """
-        cursor.execute(update_query, row)
+        
+        # Prepare values for the fields
+        update_values = list(fields_to_update.values())
+        update_values.append(datetime.now())  # Add current timestamp for update_date
+        update_values.append(row['link'])     # Add the link value to the query's WHERE clause
+
+        cursor.execute(update_query, update_values)
         conn.commit()
 
-        logging.info(f"Updated content for link {row['link']}.")
+        logging.info(f"Updated fields {', '.join(fields_to_update.keys())} for link {row['link']}.")
     except Exception as e:
-        logging.error(f"Error updating news content: {e}")
+        logging.error(f"Error updating news row: {e}")
         if conn:
             conn.rollback()
-    
     finally:
         if cursor:
             cursor.close()
         if conn:
             conn.close()
+

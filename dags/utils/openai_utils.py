@@ -1,20 +1,25 @@
 import os
 from openai import OpenAI
-from dotenv import load_dotenv
-from gptcache import cache
 
-load_dotenv()
+client = OpenAI(api_key="")
 
-client = OpenAI()
-cache.init()
-cache.set_openai_key()
 
+tag_list = [
+    "shares_issue", "observation_status", "financial_results", "mergers_acquisitions",
+    "annual_general_meeting", "management_change", "annual_report", "exchange_announcement",
+    "ex_dividend_date", "converence_call_webinar", "geographic_expansion", "analyst_coverage",
+    "financial_calendar", "share_capital_increase", "bond_fixing", "fund_data_announcement",
+    "capital_investment", "calendar_of_events", "voting_rights", "law_legal_issues",
+    "initial_public_offering", "regulatory_filings", "joint_venture", "partnerships",
+    "environmental_social_governance", "business_contracts", "financing_agreements", "patents",
+    "bankruptcy",
+    "lawsuit" ]
 # Load environment variables
 
-model_name = "gpt-4o"  # Updated model name
+model_name = "gpt-4o-mini"  # Updated model name
 
-def tag_news(news, tags):
-    prompt = f'Answering with one tag only, pick up the best tag which describes the news "{news}" from the list: {tags}'
+def tag_news(news):
+    prompt = f'Answering with one tag only, pick up the best tag which describes the news "{news}" from the list: {",".join(tag_list)}'
     response = client.chat.completions.create(
         model=model_name,
         messages=[{"role": "user", "content": prompt}]
