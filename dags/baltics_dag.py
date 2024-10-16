@@ -143,7 +143,7 @@ dag = DAG(
     'nasdaqbaltic_dag',
     default_args=default_args,
     description='A DAG to fetch and save Nasdaq Baltic RSS feed data',
-    schedule_interval='@hourly',  # Schedule to run every hour
+    schedule_interval='@daily',  # Schedule to run every hour
 )
 
 # Define the task
