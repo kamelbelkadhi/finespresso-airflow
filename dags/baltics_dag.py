@@ -54,7 +54,7 @@ def fetch_nasdaqbaltic_rss(**kwargs):
                 'company': company,
                 'published_date': pub_date_est_str,
                 'published_date_gmt': pub_date_gmt_str,
-                'publisher': 'baltics',
+                'publisher': 'Baltics',
                 'industry': '',
                 'content': '',
                 'ticker': '',
@@ -104,7 +104,8 @@ def process_news_content(**kwargs):
     for row in new_rows:
         title = row['title']
         content = row['content']
-        
+        if not content:
+            continue
         # Use OpenAI to summarize the content and generate tags
         logger.info(f"Generating summary for news title: {title}")
         summary = summarize(content)

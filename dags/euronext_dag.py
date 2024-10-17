@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 import logging
 from utils.db_utils import *
 from utils.oslobors_euronext import get_news_details
+from utils.openai_utils import *
 from pytz import timezone
 
 # Set up logging
@@ -21,10 +22,13 @@ URL_PREFIX = 'https://live.euronext.com'
 def fetch_euronext_news(**kwargs):    
     rows = get_news_details()
     data = []
-    for row in rows:                 
+    for row in rows:               
+        pub_date = datetime.strptime(row['publishedTime'], '%Y-%m-%dT%H:%M:%S.%fZ')
+
+        pub_date_gmt_str = pub_date.strftime('%Y-%m-%d %H:%M:%S')
         data.append({
-            'published_date': row['publishedTime'],
-            'published_date_gmt': row['publishedTime'],
+            'published_date': pub_date_gmt_str,
+            'published_date_gmt': pub_date_gmt_str,
             'company': row['issuerName'],
             'title': row['title'],
             'link': row['link'],
@@ -49,7 +53,7 @@ def fetch_euronext_news(**kwargs):
 # Function to process and tag news content, similar to Nasdaq DAG
 def process_news_content(**kwargs):
     logger.info("Starting process_news_content task...")
-    new_rows = check_for_empty_fields(fields=['ai_summary', 'publisher_topic'], publisher_filter='euronext')
+    new_rows = check_for_empty_fields(fields=['ai_summary', 'publisher_topic'])
     logger.info(f"Found {len(new_rows)} rows to process for tags and summaries")
     
     for row in new_rows:
@@ -57,7 +61,7 @@ def process_news_content(**kwargs):
         content = row['content']
         
         logger.info(f"Generating summary for news title: {title}")
-        summary = summarize(content)
+        summary = summarize(content).replace('\n', '')
         logger.info(f"Generated summary: {summary}")
         
         logger.info(f"Generating tag for news title: {title}")
@@ -66,7 +70,8 @@ def process_news_content(**kwargs):
         
         fields_to_update = {}
         if summary:
-            fields_to_update['ai_summary'] = summary
+            fields_to_update['ai_summary'] = summary.split('&&&')[0]
+            fields_to_update['ai_summary_ee'] = summary.split('&&&')[1]
         if tag:
             fields_to_update['publisher_topic'] = tag
         

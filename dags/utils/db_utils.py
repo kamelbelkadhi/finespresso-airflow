@@ -119,10 +119,11 @@ def check_for_empty_fields(fields, publisher_filter=None, time_range_hours=2):
         # Build the query dynamically based on the provided fields
         conditions = " OR ".join([f"{field} = ''" for field in fields])
         
+        # Update query to cast 'insert_date' to a timestamp for comparison
         query = f"""
         SELECT * FROM public.news_
         WHERE ({conditions})
-        AND insert_date >= %s
+        AND insert_date::timestamp >= %s
         """
         
         # If a publisher filter is provided, add it to the query
@@ -147,6 +148,7 @@ def check_for_empty_fields(fields, publisher_filter=None, time_range_hours=2):
             cursor.close()
         if conn:
             conn.close()
+
 
 
 

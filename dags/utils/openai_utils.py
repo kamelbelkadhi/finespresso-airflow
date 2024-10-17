@@ -1,7 +1,7 @@
 import os
 from openai import OpenAI
 
-client = OpenAI(api_key="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")
+client = OpenAI(api_key="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")
 
 
 tag_list = [
@@ -16,7 +16,7 @@ tag_list = [
     "lawsuit" ]
 # Load environment variables
 
-model_name = "gpt-4o-mini"  # Updated model name
+model_name = "gpt-4o-mini"  #Updated model name
 
 def tag_news(news):
     prompt = f'Answering with one tag only, pick up the best tag which describes the news "{news}" from the list: {",".join(tag_list)}'
@@ -28,7 +28,8 @@ def tag_news(news):
     return tag
 
 def summarize(news):
-    prompt = f'Summarize this in a brief, concise and neutral way like a financial analyst (50 words or less): "{news}"'
+    prompt = f"""Summarize this in a brief, concise and neutral way like a financial analyst (50 words or less): "{news}". 
+                 You need to give me the summarize in two languages: English and Estonian. Start with English first, and make this specific charater as a seperator between the different languagues: &&& and Just give me the summaries directly."""
     response = client.chat.completions.create(
         model=model_name,
         messages=[{"role": "user", "content": prompt}]
