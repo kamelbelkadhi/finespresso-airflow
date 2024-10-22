@@ -7,7 +7,6 @@ set -e
 PROJECT_ID=$(gcloud config get-value project)
 REGION=${REGION:-europe-north1}
 SERVICE_NAME=airflow-webserver
-SCHEDULER_SERVICE_NAME=airflow-scheduler
 IMAGE_NAME=airflow-image
 CLOUD_SQL_INSTANCE=airflow-sql-instance
 DB_NAME=airflow
@@ -19,20 +18,8 @@ AIRFLOW_USERNAME=admin
 AIRFLOW_PASSWORD=admin
 
 # Set or load the database password
-if [ -f db_password.txt ]; then
-    DB_PASSWORD=$(cat db_password.txt)
-else
-    DB_PASSWORD=${DB_PASSWORD:-$(openssl rand -hex 16)}
-    echo $DB_PASSWORD > db_password.txt
-fi
-
-# Set or load the root database password
-if [ -f root_password.txt ]; then
-    ROOT_DB_PASSWORD=$(cat root_password.txt)
-else
-    ROOT_DB_PASSWORD=${ROOT_DB_PASSWORD:-$(openssl rand -hex 16)}
-    echo $ROOT_DB_PASSWORD > root_password.txt
-fi
+DB_PASSWORD=${DB_PASSWORD:-$(openssl rand -hex 16)}
+ROOT_DB_PASSWORD=${ROOT_DB_PASSWORD:-$(openssl rand -hex 16)}
 
 # Check if gcloud is installed
 if ! command -v gcloud &> /dev/null
@@ -127,6 +114,9 @@ ENV_VARS+=",AIRFLOW__CORE__FERNET_KEY=$(openssl rand -base64 32)"
 ENV_VARS+=",AIRFLOW__WEBSERVER__SECRET_KEY=$(openssl rand -base64 32)"
 ENV_VARS+=",GOOGLE_CLOUD_PROJECT=$PROJECT_ID"
 ENV_VARS+=",AIRFLOW__CORE__EXECUTOR=LocalExecutor"
+ENV_VARS+=",AIRFLOW__CORE__DEFAULT_TIMEZONE=UTC"
+ENV_VARS+=",AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True"
+ENV_VARS+=",AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT=360"
 
 # Deploy Airflow webserver to Cloud Run
 echo "Deploying Airflow webserver to Cloud Run..."
@@ -141,20 +131,6 @@ gcloud run deploy $SERVICE_NAME \
     --cpu 4 \
     --allow-unauthenticated \
     --min-instances 1
-
-# Deploy Airflow scheduler to Cloud Run
-#echo "Deploying Airflow scheduler to Cloud Run..."
-#gcloud run deploy airflow-scheduler \
-#    --image gcr.io/$PROJECT_ID/$IMAGE_NAME \
-#    --platform managed \
-#    --region $REGION \
-#    --service-account $SERVICE_ACCOUNT_EMAIL \
-#    --add-cloudsql-instances $PROJECT_ID:$REGION:$CLOUD_SQL_INSTANCE \
-#    --set-env-vars "$ENV_VARS" \
-#    --memory 2Gi \
-#    --no-allow-unauthenticated \
-#    --command "/scheduler_entrypoint.sh" \
-#    --min-instances 1
 
 
 # Output the webserver service URL

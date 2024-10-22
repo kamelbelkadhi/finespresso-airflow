@@ -83,12 +83,13 @@ def process_news_content(**kwargs):
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'start_date': datetime(2024, 10, 16),
+    'start_date': datetime.now().replace(minute=0, second=0, microsecond=0),
     'email': ['kamelbelkadhi2@gmail.com'],
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 0,
     'retry_delay': timedelta(minutes=5),
+    'catchup':False
 }
 
 # Define the DAG
@@ -96,7 +97,7 @@ dag = DAG(
     'euronext_dag',
     default_args=default_args,
     description='A DAG to fetch and save Euronext company news data',
-    schedule_interval='@daily',  # Run every hour
+    schedule_interval='@hourly',  # Run every hour
 )
 
 # Define the tasks

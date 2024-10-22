@@ -26,10 +26,6 @@ COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 RUN chown airflow: /entrypoint.sh
 
-# Copy scheduler entrypoint script and set permissions
-COPY scheduler_entrypoint.sh /scheduler_entrypoint.sh
-RUN chmod +x /scheduler_entrypoint.sh
-RUN chown airflow: /scheduler_entrypoint.sh
 
 # Switch back to airflow user
 USER airflow

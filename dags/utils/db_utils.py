@@ -3,6 +3,7 @@ from psycopg2 import sql
 from datetime import datetime, timedelta
 import logging
 from psycopg2.extras import RealDictCursor
+import pytz
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -32,7 +33,8 @@ def insert_news_data(data):
         %(title)s, %(link)s, %(company)s, %(published_date)s, %(published_date_gmt)s,
         %(publisher)s, %(industry)s, %(content)s, %(ticker)s, %(ai_summary)s, %(publisher_topic)s,
         %(status)s, %(timezone)s, %(publisher_summary)s, %(insert_date)s, %(update_date)s
-    );
+    )
+    ON CONFLICT (link) DO NOTHING;;
     """
     
     conn = None
@@ -48,8 +50,8 @@ def insert_news_data(data):
                 logging.info(f"News with link {row['link']} already exists. Skipping insertion.")
                 continue  # Skip this row if it already exists
             
-            row['insert_date'] = datetime.now()  # Add current timestamp for insert_date
-            row['update_date'] = datetime.now()  # Add current timestamp for update_date (same as insert date)
+            row['insert_date'] = datetime.now(pytz.utc) # Add current timestamp for insert_date
+            row['update_date'] = datetime.now(pytz.utc) # Add current timestamp for update_date (same as insert date)
             
             cursor.execute(insert_query, row)
         
@@ -97,7 +99,7 @@ def check_existing_news(link):
         if conn:
             conn.close()
 
-def check_for_empty_fields(fields, publisher_filter=None, time_range_hours=2):
+def check_for_empty_fields(fields, publisher_filter=None, time_range_hours=24):
     """
     Fetches rows where specified fields are empty or meet a specific condition, 
     created within the last `time_range_hours`, and applies an optional filter for specific publishers.
@@ -114,7 +116,7 @@ def check_for_empty_fields(fields, publisher_filter=None, time_range_hours=2):
         cursor = conn.cursor(cursor_factory=RealDictCursor)  # Use RealDictCursor to return rows as dictionaries
 
         # Define the time range
-        time_threshold = datetime.now() - timedelta(hours=time_range_hours)
+        time_threshold = datetime.now(pytz.utc) - timedelta(hours=time_range_hours)
         
         # Build the query dynamically based on the provided fields
         conditions = " OR ".join([f"{field} = ''" for field in fields])
@@ -125,7 +127,8 @@ def check_for_empty_fields(fields, publisher_filter=None, time_range_hours=2):
         WHERE ({conditions})
         AND insert_date::timestamp >= %s
         """
-        
+        logging.info(f"time_threshold: {time_threshold}" )
+        logging.info(f"running query with time_threshold: {query}" )
         # If a publisher filter is provided, add it to the query
         if publisher_filter:
             query += " AND publisher = %s"
@@ -186,7 +189,7 @@ def update_news_row(row, fields_to_update):
         
         # Prepare values for the fields
         update_values = list(fields_to_update.values())
-        update_values.append(datetime.now())  # Add current timestamp for update_date
+        update_values.append(datetime.now(pytz.utc))  # Add current timestamp for update_date
         update_values.append(row['link'])     # Add the link value to the query's WHERE clause
 
         cursor.execute(update_query, update_values)

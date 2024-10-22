@@ -75,7 +75,7 @@ def fetch_nasdaqbaltic_rss(**kwargs):
 def get_news_content(**kwargs):
     logger.info("Starting get_news_content task...")
     # Fetch rows where 'content' is empty
-    new_rows = check_for_empty_fields(fields=['content'], publisher_filter='baltics')
+    new_rows = check_for_empty_fields(fields=['content'], publisher_filter='Baltics')
     logger.info(f"Found {len(new_rows)} rows with empty content")
     
     for row in new_rows:
@@ -98,27 +98,25 @@ def get_news_content(**kwargs):
 def process_news_content(**kwargs):
     logger.info("Starting process_news_content task...")
     # Fetch rows where 'ai_summary' or 'publisher_topic' are empty
-    new_rows = check_for_empty_fields(fields=['ai_summary', 'publisher_topic'], publisher_filter='baltics')
+    new_rows = check_for_empty_fields(fields=['ai_summary', 'publisher_topic'], publisher_filter='Baltics')
     logger.info(f"Found {len(new_rows)} rows to process for tags and summaries")
     
     for row in new_rows:
         title = row['title']
         content = row['content']
-        if not content:
-            continue
-        # Use OpenAI to summarize the content and generate tags
+        
         logger.info(f"Generating summary for news title: {title}")
-        summary = summarize(content)
+        summary = summarize(content).replace('\n', '')
         logger.info(f"Generated summary: {summary}")
         
         logger.info(f"Generating tag for news title: {title}")
         tag = tag_news(content)
         logger.info(f"Generated tag: {tag}")
         
-        # Prepare the fields to update
         fields_to_update = {}
         if summary:
-            fields_to_update['ai_summary'] = summary
+            fields_to_update['ai_summary'] = summary.split('&&&')[0]
+            fields_to_update['ai_summary_ee'] = summary.split('&&&')[1]
         if tag:
             fields_to_update['publisher_topic'] = tag
         
@@ -131,12 +129,14 @@ def process_news_content(**kwargs):
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'start_date': datetime(2024, 10, 15),
+    'start_date': datetime.now().replace(minute=0, second=0, microsecond=0),
     'email': ['kamelbelkadhi2@gmail.com'],  # Add your email here
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 0,
     'retry_delay': timedelta(minutes=5),
+    'catchup':False,
+    'execution_timeout':timedelta(minutes=15)
 }
 
 # Define the DAG
@@ -144,7 +144,7 @@ dag = DAG(
     'nasdaqbaltic_dag',
     default_args=default_args,
     description='A DAG to fetch and save Nasdaq Baltic RSS feed data',
-    schedule_interval='@daily',  # Schedule to run every hour
+    schedule_interval='@hourly',  # Schedule to run every hour
 )
 
 # Define the task
