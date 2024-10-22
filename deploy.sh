@@ -125,7 +125,6 @@ ENV_VARS="AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://$DB_USER:$DB
 ENV_VARS+=",AIRFLOW__CORE__LOAD_EXAMPLES=false"
 ENV_VARS+=",AIRFLOW__CORE__FERNET_KEY=$(openssl rand -base64 32)"
 ENV_VARS+=",AIRFLOW__WEBSERVER__SECRET_KEY=$(openssl rand -base64 32)"
-ENV_VARS+=",AIRFLOW__CORE__DAGS_FOLDER=gs://$BUCKET_NAME/dags"
 ENV_VARS+=",GOOGLE_CLOUD_PROJECT=$PROJECT_ID"
 ENV_VARS+=",AIRFLOW__CORE__EXECUTOR=LocalExecutor"
 
@@ -138,23 +137,24 @@ gcloud run deploy $SERVICE_NAME \
     --service-account $SERVICE_ACCOUNT_EMAIL \
     --add-cloudsql-instances $PROJECT_ID:$REGION:$CLOUD_SQL_INSTANCE \
     --set-env-vars "$ENV_VARS" \
-    --memory 2Gi \
+    --memory 8Gi \
+    --cpu 4 \
     --allow-unauthenticated \
     --min-instances 1
 
 # Deploy Airflow scheduler to Cloud Run
-echo "Deploying Airflow scheduler to Cloud Run..."
-gcloud run deploy airflow-scheduler \
-    --image gcr.io/$PROJECT_ID/$IMAGE_NAME \
-    --platform managed \
-    --region $REGION \
-    --service-account $SERVICE_ACCOUNT_EMAIL \
-    --add-cloudsql-instances $PROJECT_ID:$REGION:$CLOUD_SQL_INSTANCE \
-    --set-env-vars "$ENV_VARS" \
-    --memory 2Gi \
-    --no-allow-unauthenticated \
-    --command "/scheduler_entrypoint.sh" \
-    --min-instances 1
+#echo "Deploying Airflow scheduler to Cloud Run..."
+#gcloud run deploy airflow-scheduler \
+#    --image gcr.io/$PROJECT_ID/$IMAGE_NAME \
+#    --platform managed \
+#    --region $REGION \
+#    --service-account $SERVICE_ACCOUNT_EMAIL \
+#    --add-cloudsql-instances $PROJECT_ID:$REGION:$CLOUD_SQL_INSTANCE \
+#    --set-env-vars "$ENV_VARS" \
+#    --memory 2Gi \
+#    --no-allow-unauthenticated \
+#    --command "/scheduler_entrypoint.sh" \
+#    --min-instances 1
 
 
 # Output the webserver service URL

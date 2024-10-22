@@ -13,8 +13,13 @@ COPY --chown=airflow:root requirements.txt /opt/airflow/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir apache-airflow-providers-google
 
+
+
 # Switch to root to copy entrypoint scripts and adjust permissions
 USER root
+
+COPY dags /opt/airflow/dags
+RUN chown -R airflow: /opt/airflow/dags
 
 # Copy entrypoint script and set permissions
 COPY entrypoint.sh /entrypoint.sh

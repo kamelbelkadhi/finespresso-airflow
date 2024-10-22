@@ -1,7 +1,7 @@
 import os
 from openai import OpenAI
 
-client = OpenAI(api_key="")
+client = OpenAI(api_key="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")
 
 
 tag_list = [
