@@ -1,8 +1,33 @@
 FROM apache/airflow:2.10.2-python3.8
 
-ENV AIRFLOW__WEBSERVER__SECRET_KEY='2385fea04030a18a1f8ff5876ad8a327'
+# Switch to airflow user for installing Python packages
+USER airflow
 
-# Install any additional packages
-COPY requirements.txt .
+# Set the working directory
+WORKDIR /opt/airflow
 
+# Copy requirements.txt and ensure airflow user ownership
+COPY --chown=airflow:root requirements.txt /opt/airflow/requirements.txt
+
+# Install any additional packages as airflow user
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir apache-airflow-providers-google
+
+# Switch to root to copy entrypoint scripts and adjust permissions
+USER root
+
+# Copy entrypoint script and set permissions
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+RUN chown airflow: /entrypoint.sh
+
+# Copy scheduler entrypoint script and set permissions
+COPY scheduler_entrypoint.sh /scheduler_entrypoint.sh
+RUN chmod +x /scheduler_entrypoint.sh
+RUN chown airflow: /scheduler_entrypoint.sh
+
+# Switch back to airflow user
+USER airflow
+
+# Set the default entrypoint
+ENTRYPOINT ["/entrypoint.sh"]

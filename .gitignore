@@ -79,3 +79,6 @@ docs/_build/
 
 # Local development environments
 .vscode/
+
+**/__pycache__
+**/.DS_Store
