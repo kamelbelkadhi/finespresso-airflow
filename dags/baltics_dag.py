@@ -8,6 +8,7 @@ import logging
 from utils.web_utils import get_content
 from utils.db_utils import *
 from utils.openai_utils import *
+from utils.dag_utils import *
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -97,31 +98,14 @@ def get_news_content(**kwargs):
 
 def process_news_content(**kwargs):
     logger.info("Starting process_news_content task...")
-    # Fetch rows where 'ai_summary' or 'publisher_topic' are empty
     new_rows = check_for_empty_fields(fields=['ai_summary', 'publisher_topic'], publisher_filter='Baltics')
     logger.info(f"Found {len(new_rows)} rows to process for tags and summaries")
     
     for row in new_rows:
-        title = row['title']
-        content = row['content']
-        
-        logger.info(f"Generating summary for news title: {title}")
-        summary = summarize(content).replace('\n', '')
-        logger.info(f"Generated summary: {summary}")
-        
-        logger.info(f"Generating tag for news title: {title}")
-        tag = tag_news(content)
-        logger.info(f"Generated tag: {tag}")
-        
-        fields_to_update = {}
-        if summary:
-            fields_to_update['ai_summary'] = summary.split('&&&')[0]
-            fields_to_update['ai_summary_ee'] = summary.split('&&&')[1]
-        if tag:
-            fields_to_update['publisher_topic'] = tag
+        fields_to_update = process_content_and_tags(row)
         
         if fields_to_update:
-            logger.info(f"Updating fields {fields_to_update.keys()} for title: {title}")
+            logger.info(f"Updating fields {fields_to_update.keys()} for title: {row['title']}")
             update_news_row(row, fields_to_update)
 
 
