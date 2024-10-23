@@ -13,3 +13,4 @@ PyYAML
 holidays
 pandas_market_calendars
 pytz==2023.3
+google-cloud-bigquery

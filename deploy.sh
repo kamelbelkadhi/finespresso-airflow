@@ -16,6 +16,7 @@ SERVICE_ACCOUNT_EMAIL=$SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com
 BUCKET_NAME=${PROJECT_ID}-airflow-dags
 AIRFLOW_USERNAME=admin
 AIRFLOW_PASSWORD=admin
+BIGQUERY_DATASET='finespresso_datawarehouse'
 
 # Set or load the database password
 DB_PASSWORD=${DB_PASSWORD:-$(openssl rand -hex 16)}
@@ -34,7 +35,8 @@ gcloud services enable \
     compute.googleapis.com \
     sqladmin.googleapis.com \
     cloudbuild.googleapis.com \
-    run.googleapis.com
+    run.googleapis.com \
+    bigquery.googleapis.com
 
 # Create service account if not exist
 if ! gcloud iam service-accounts list --filter="email:$SERVICE_ACCOUNT_EMAIL" --format="value(email)" | grep "$SERVICE_ACCOUNT_EMAIL" &> /dev/null
@@ -48,10 +50,16 @@ fi
 echo "Assigning roles to the service account..."
 gcloud projects add-iam-policy-binding $PROJECT_ID \
     --member serviceAccount:$SERVICE_ACCOUNT_EMAIL \
-    --role roles/cloudsql.client
+    --role roles/storage.objectViewer
 gcloud projects add-iam-policy-binding $PROJECT_ID \
     --member serviceAccount:$SERVICE_ACCOUNT_EMAIL \
-    --role roles/storage.objectViewer
+    --role roles/bigquery.dataEditor
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member serviceAccount:$SERVICE_ACCOUNT_EMAIL \
+    --role roles/bigquery.user
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member serviceAccount:$SERVICE_ACCOUNT_EMAIL \
+    --role roles/cloudsql.client
 
 # Create Cloud SQL instance if not exist
 if ! gcloud sql instances list --filter="name=$CLOUD_SQL_INSTANCE" --format="value(name)" | grep "$CLOUD_SQL_INSTANCE" &> /dev/null
@@ -107,16 +115,18 @@ echo "Uploading DAGs to GCS bucket..."
 gsutil cp -r dags/* gs://$BUCKET_NAME/dags/
 
 # Prepare environment variables
-#ENV_VARS="AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://$DB_USER:$DB_PASSWORD@/$DB_NAME?host=/cloudsql/$PROJECT_ID:$REGION:$CLOUD_SQL_INSTANCE"
 ENV_VARS="AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://$DB_USER:$DB_PASSWORD@/$DB_NAME?host=/cloudsql/$PROJECT_ID:$REGION:$CLOUD_SQL_INSTANCE"
+ENV_VARS+=",BIGQUERY_DATASET=$BIGQUERY_DATASET"
+ENV_VARS+=",GOOGLE_CLOUD_PROJECT=$PROJECT_ID"
 ENV_VARS+=",AIRFLOW__CORE__LOAD_EXAMPLES=false"
 ENV_VARS+=",AIRFLOW__CORE__FERNET_KEY=$(openssl rand -base64 32)"
 ENV_VARS+=",AIRFLOW__WEBSERVER__SECRET_KEY=$(openssl rand -base64 32)"
-ENV_VARS+=",GOOGLE_CLOUD_PROJECT=$PROJECT_ID"
 ENV_VARS+=",AIRFLOW__CORE__EXECUTOR=LocalExecutor"
 ENV_VARS+=",AIRFLOW__CORE__DEFAULT_TIMEZONE=UTC"
 ENV_VARS+=",AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True"
 ENV_VARS+=",AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT=360"
+ENV_VARS+=",AIRFLOW_PASSWORD=$AIRFLOW_PASSWORD"
+ENV_VARS+=",AIRFLOW_USERNAME=$AIRFLOW_USERNAME"
 
 # Deploy Airflow webserver to Cloud Run
 echo "Deploying Airflow webserver to Cloud Run..."
@@ -131,7 +141,6 @@ gcloud run deploy $SERVICE_NAME \
     --cpu 4 \
     --allow-unauthenticated \
     --min-instances 1
-
 
 # Output the webserver service URL
 SERVICE_URL=$(gcloud run services describe $SERVICE_NAME --platform managed --region $REGION --format 'value(status.url)')

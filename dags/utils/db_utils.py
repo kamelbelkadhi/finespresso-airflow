@@ -1,208 +1,156 @@
-import psycopg2
-from psycopg2 import sql
-from datetime import datetime, timedelta
 import logging
-from psycopg2.extras import RealDictCursor
+from datetime import datetime, timedelta
 import pytz
+import json
+from google.cloud import bigquery
+import os
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s - %(levelname)s - %(message)s', 
-                    filename='news_data.log', 
-                    filemode='a')  # 'a' for append mode
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    filename='news_data.log',
+    filemode='a'  # 'a' for append mode
+)
 
-db_url = 'postgresql://finespresso_user:7RkY1Sj27bzcoChbP7BlFLzOa9w77CxZ@dpg-cro7gpi3esus73bv7uvg-a.frankfurt-postgres.render.com/finespresso'
+# Initialize BigQuery client
+client = bigquery.Client()
 
-def connect_to_db():
-    conn = psycopg2.connect(db_url)
-    logging.info("Database connection established.")
-    return conn
+# Read BigQuery dataset and table IDs from environment variables
+dataset_id = os.environ.get('BIGQUERY_DATASET')
+table_id = 'news'#os.environ.get('BIGQUERY_TABLE', 'news')
+full_table_id = f"{client.project}.{dataset_id}.{table_id}"
+
+# Load schema from JSON file
+with open('schemas/news.json', 'r') as f:
+    schema_json = json.load(f)
+
+def json_to_bq_schema(json_schema):
+    bq_schema = []
+    for field in json_schema['fields']:
+        bq_schema.append(
+            bigquery.SchemaField(
+                name=field['name'],
+                field_type=field['type'].upper(),
+                mode=field.get('mode', 'NULLABLE')
+            )
+        )
+    return bq_schema
+
+def create_table_if_not_exists():
+    try:
+        client.get_table(full_table_id)
+        logging.info(f"Table {full_table_id} already exists.")
+    except Exception:
+        # Table does not exist
+        bq_schema = json_to_bq_schema(schema_json)
+        table = bigquery.Table(full_table_id, schema=bq_schema)
+        client.create_table(table)
+        logging.info(f"Created table {full_table_id}.")
+
+def get_existing_links(links):
+    create_table_if_not_exists()
+    query = f"""
+    SELECT link FROM `{full_table_id}`
+    WHERE link IN UNNEST(@links)
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ArrayQueryParameter("links", "STRING", links)
+        ]
+    )
+    query_job = client.query(query, job_config=job_config)
+    results = query_job.result()
+    return set(row.link for row in results)
 
 def insert_news_data(data):
-    """
-    Inserts news data into the PostgreSQL database, checking for duplicates based on the link.
-    
-    :param data: A list of dictionaries containing the news data to be inserted.
-    """
-    insert_query = """
-    INSERT INTO public.news_ (
-        title, link, company, published_date, published_date_gmt,
-        publisher, industry, content, ticker, ai_summary, publisher_topic,
-        status, timezone, publisher_summary, insert_date, update_date
-    ) VALUES (
-        %(title)s, %(link)s, %(company)s, %(published_date)s, %(published_date_gmt)s,
-        %(publisher)s, %(industry)s, %(content)s, %(ticker)s, %(ai_summary)s, %(publisher_topic)s,
-        %(status)s, %(timezone)s, %(publisher_summary)s, %(insert_date)s, %(update_date)s
-    )
-    ON CONFLICT (link) DO NOTHING;;
-    """
-    
-    conn = None
-    cursor = None
-    try:
-        # Connect to the PostgreSQL database
-        conn = connect_to_db()
-        cursor = conn.cursor()
-
-        # Insert each row of data after checking for duplicate links
-        for row in data:
-            if check_existing_news(row['link']):
-                logging.info(f"News with link {row['link']} already exists. Skipping insertion.")
-                continue  # Skip this row if it already exists
-            
-            row['insert_date'] = datetime.now(pytz.utc) # Add current timestamp for insert_date
-            row['update_date'] = datetime.now(pytz.utc) # Add current timestamp for update_date (same as insert date)
-            
-            cursor.execute(insert_query, row)
-        
-        # Commit the transaction
-        conn.commit()
-        logging.info(f"{len(data)} new records inserted successfully.")
-
-    except Exception as e:
-        logging.error(f"An error occurred while inserting data: {e}")
-        if conn:
-            conn.rollback()  # Rollback in case of error
-    
-    finally:
-        # Close the cursor and connection
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
-        logging.info("Database connection closed.")
-
-
+    create_table_if_not_exists()
+    existing_links = get_existing_links([row['link'] for row in data])
+    data_to_insert = []
+    for row in data:
+        if row['link'] in existing_links:
+            logging.info(f"News with link {row['link']} already exists. Skipping insertion.")
+            continue
+        row['insert_date'] = datetime.now(pytz.utc).isoformat()
+        row['update_date'] = datetime.now(pytz.utc).isoformat()
+        data_to_insert.append(row)
+    if data_to_insert:
+        errors = client.insert_rows_json(full_table_id, data_to_insert)
+        if not errors:
+            logging.info(f"{len(data_to_insert)} new records inserted successfully.")
+        else:
+            logging.error(f"Errors occurred while inserting data: {errors}")
+    else:
+        logging.info("No new records to insert.")
 
 def check_existing_news(link):
+    create_table_if_not_exists()
+    query = f"""
+    SELECT COUNT(1) as cnt FROM `{full_table_id}`
+    WHERE link = @link
     """
-    Checks if the news with the given link already exists in the database.
-    :param link: The news link to check.
-    :return: True if the link exists, False otherwise.
-    """
-    conn = None
-    cursor = None
-    try:
-        conn = connect_to_db()
-        cursor = conn.cursor()
-        check_query = "SELECT EXISTS(SELECT 1 FROM public.news_ WHERE link = %s)"
-        cursor.execute(check_query, (link,))
-        exists = cursor.fetchone()[0]
-        logging.info(f"Checked existing news for link {link}, exists: {exists}")
-        return exists
-    except Exception as e:
-        logging.error(f"Error checking existing news: {e}")
-        return False
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("link", "STRING", link)
+        ]
+    )
+    query_job = client.query(query, job_config=job_config)
+    result = query_job.result()
+    exists = any(row.cnt > 0 for row in result)
+    logging.info(f"Checked existing news for link {link}, exists: {exists}")
+    return exists
 
 def check_for_empty_fields(fields, publisher_filter=None, time_range_hours=24):
+    create_table_if_not_exists()
+    time_threshold = (datetime.now(pytz.utc) - timedelta(hours=time_range_hours)).isoformat()
+    conditions = " OR ".join([f"({field} IS NULL OR {field} = '')" for field in fields])
+    query = f"""
+    SELECT * FROM `{full_table_id}`
+    WHERE ({conditions})
+    AND insert_date >= @time_threshold
     """
-    Fetches rows where specified fields are empty or meet a specific condition, 
-    created within the last `time_range_hours`, and applies an optional filter for specific publishers.
-
-    :param fields: A list of field names to check for being empty or null.
-    :param publisher_filter: Optional publisher name to filter by.
-    :param time_range_hours: Time range in hours to limit the search.
-    :return: List of rows with empty or null fields as dictionaries, sorted by the newest added.
-    """
-    conn = None
-    cursor = None
-    try:
-        conn = connect_to_db()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)  # Use RealDictCursor to return rows as dictionaries
-
-        # Define the time range
-        time_threshold = datetime.now(pytz.utc) - timedelta(hours=time_range_hours)
-        
-        # Build the query dynamically based on the provided fields
-        conditions = " OR ".join([f"{field} = ''" for field in fields])
-        
-        # Update query to cast 'insert_date' to a timestamp for comparison
-        query = f"""
-        SELECT * FROM public.news_
-        WHERE ({conditions})
-        AND insert_date::timestamp >= %s
-        """
-        logging.info(f"time_threshold: {time_threshold}" )
-        logging.info(f"running query with time_threshold: {query}" )
-        # If a publisher filter is provided, add it to the query
-        if publisher_filter:
-            query += " AND publisher = %s"
-        
-        query += " ORDER BY published_date DESC"
-
-        if publisher_filter:
-            cursor.execute(query, (time_threshold, publisher_filter))
-        else:
-            cursor.execute(query, (time_threshold,))
-        
-        logging.info(f"Fetched rows with empty fields: {fields}")
-        return cursor.fetchall()  # Returns rows as a list of dictionaries
-
-    except Exception as e:
-        logging.error(f"Error fetching rows with empty fields: {e}")
-        return []
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
-
-
-
-
+    query_parameters = [
+        bigquery.ScalarQueryParameter("time_threshold", "TIMESTAMP", time_threshold)
+    ]
+    if publisher_filter:
+        query += " AND publisher = @publisher"
+        query_parameters.append(bigquery.ScalarQueryParameter("publisher", "STRING", publisher_filter))
+    query += " ORDER BY published_date DESC"
+    job_config = bigquery.QueryJobConfig(query_parameters=query_parameters)
+    query_job = client.query(query, job_config=job_config)
+    results = query_job.result()
+    rows = [dict(row) for row in results]
+    logging.info(f"Fetched rows with empty fields: {fields}")
+    return rows
 
 def update_news_row(row, fields_to_update):
-    """
-    Updates specified fields of a news row in the database, including the update_date.
-
-    :param row: The row data to update, must contain the 'link' key.
-    :param fields_to_update: A dictionary of fields and their new values to update.
-    """
     if 'link' not in row:
         logging.error("Link is missing from the row data, cannot perform update.")
         return
-
-    conn = None
-    cursor = None
-    try:
-        conn = connect_to_db()
-        cursor = conn.cursor()
-
-        # Prepare the SQL query dynamically based on fields to update
-        set_clauses = []
-        for field in fields_to_update:
-            set_clauses.append(f"{field} = %s")
-        
-        # Add the update_date field to always update it
-        set_clauses.append("update_date = %s")
-        
-        update_query = f"""
-        UPDATE public.news_
-        SET {', '.join(set_clauses)}
-        WHERE link = %s
-        """
-        
-        # Prepare values for the fields
-        update_values = list(fields_to_update.values())
-        update_values.append(datetime.now(pytz.utc))  # Add current timestamp for update_date
-        update_values.append(row['link'])     # Add the link value to the query's WHERE clause
-
-        cursor.execute(update_query, update_values)
-        conn.commit()
-
-        logging.info(f"Updated fields {', '.join(fields_to_update.keys())} for link {row['link']}.")
-    except Exception as e:
-        logging.error(f"Error updating news row: {e}")
-        if conn:
-            conn.rollback()
-    finally:
-        if cursor:
-            cursor.close()
-        if conn:
-            conn.close()
-
+    create_table_if_not_exists()
+    fields_to_update['update_date'] = datetime.now(pytz.utc).isoformat()
+    set_clauses = ", ".join([f"{field} = @{field}" for field in fields_to_update.keys()])
+    query = f"""
+    UPDATE `{full_table_id}`
+    SET {set_clauses}
+    WHERE link = @link
+    """
+    query_parameters = [
+        bigquery.ScalarQueryParameter("link", "STRING", row['link'])
+    ]
+    for field, value in fields_to_update.items():
+        if isinstance(value, int):
+            param_type = "INT64"
+        elif isinstance(value, float):
+            param_type = "FLOAT64"
+        elif isinstance(value, bool):
+            param_type = "BOOL"
+        elif isinstance(value, datetime):
+            param_type = "TIMESTAMP"
+            value = value.isoformat()
+        else:
+            param_type = "STRING"
+        query_parameters.append(bigquery.ScalarQueryParameter(field, param_type, value))
+    job_config = bigquery.QueryJobConfig(query_parameters=query_parameters)
+    client.query(query, job_config=job_config).result()
+    logging.info(f"Updated fields {', '.join(fields_to_update.keys())} for link {row['link']}.")

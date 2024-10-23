@@ -1,97 +1,21 @@
-[
-  {
-    "name": "id",
-    "type": "INT64",
-    "mode": "REQUIRED"
-  },
-  {
-    "name": "title",
-    "type": "STRING",
-    "mode": "NULLABLE"
-  },
-  {
-    "name": "link",
-    "type": "STRING",
-    "mode": "REQUIRED"
-  },
-  {
-    "name": "company",
-    "type": "STRING",
-    "mode": "NULLABLE"
-  },
-  {
-    "name": "published_date",
-    "type": "TIMESTAMP",
-    "mode": "NULLABLE"
-  },
-  {
-    "name": "published_date_gmt",
-    "type": "TIMESTAMP",
-    "mode": "NULLABLE"
-  },
-  {
-    "name": "publisher",
-    "type": "STRING",
-    "mode": "NULLABLE"
-  },
-  {
-    "name": "industry",
-    "type": "STRING",
-    "mode": "NULLABLE"
-  },
-  {
-    "name": "content",
-    "type": "STRING",
-    "mode": "NULLABLE"
-  },
-  {
-    "name": "ticker",
-    "type": "STRING",
-    "mode": "NULLABLE"
-  },
-  {
-    "name": "ai_summary",
-    "type": "STRING",
-    "mode": "NULLABLE"
-  },
-  {
-    "name": "ai_summary_ee",
-    "type": "STRING",
-    "mode": "NULLABLE"
-  },
-  {
-    "name": "publisher_topic",
-    "type": "STRING",
-    "mode": "NULLABLE"
-  },
-  {
-    "name": "ai_topic",
-    "type": "STRING",
-    "mode": "NULLABLE"
-  },
-  {
-    "name": "status",
-    "type": "STRING",
-    "mode": "NULLABLE"
-  },
-  {
-    "name": "timezone",
-    "type": "STRING",
-    "mode": "NULLABLE"
-  },
-  {
-    "name": "publisher_summary",
-    "type": "STRING",
-    "mode": "NULLABLE"
-  },
-  {
-    "name": "insert_date",
-    "type": "TIMESTAMP",
-    "mode": "NULLABLE"
-  },
-  {
-    "name": "update_date",
-    "type": "TIMESTAMP",
-    "mode": "NULLABLE"
-  }
-]
+{
+  "fields": [
+    {"name": "title", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "link", "type": "STRING", "mode": "REQUIRED"},
+    {"name": "company", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "published_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
+    {"name": "published_date_gmt", "type": "TIMESTAMP", "mode": "NULLABLE"},
+    {"name": "publisher", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "industry", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "content", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "ticker", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "ai_summary", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "ai_summary_ee", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "publisher_topic", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "status", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "timezone", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "publisher_summary", "type": "STRING", "mode": "NULLABLE"},
+    {"name": "insert_date", "type": "TIMESTAMP", "mode": "NULLABLE"},
+    {"name": "update_date", "type": "TIMESTAMP", "mode": "NULLABLE"}
+  ]
+}
